@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1072895754121",
+    "project_id": "account-ai-32915",
+    "storage_bucket": "account-ai-32915.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1072895754121:android:c62cea3e5e38717d77ab58",
+        "android_client_info": {
+          "package_name": "com.example.ai_accounting_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCQPQfN3g_R57hfS3afVA9omSUYo-rZoyc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
