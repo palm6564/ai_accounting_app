@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 
 import '../control/account_controller.dart';
+import '../l10n/app_text.dart';
 import '../model/transaction.dart';
 
 class CategorySummaryView extends StatefulWidget {
@@ -21,14 +22,23 @@ class CategorySummaryView extends StatefulWidget {
 }
 
 class _CategorySummaryViewState extends State<CategorySummaryView> {
-  final TextEditingController _savingTargetController = TextEditingController();
+  final TextEditingController _unitPriceController = TextEditingController();
+  final TextEditingController _variableCostController = TextEditingController();
+  final TextEditingController _monthlyFixedCostController =
+      TextEditingController();
+  final TextEditingController _monthlyUnitsController = TextEditingController();
+  final TextEditingController _cashBalanceController = TextEditingController();
   String _categoryType = 'expense';
   int _periodMonths = 3;
-  int _planningMonths = 6;
+  String _scenario = 'base';
 
   @override
   void dispose() {
-    _savingTargetController.dispose();
+    _unitPriceController.dispose();
+    _variableCostController.dispose();
+    _monthlyFixedCostController.dispose();
+    _monthlyUnitsController.dispose();
+    _cashBalanceController.dispose();
     super.dispose();
   }
 
@@ -71,27 +81,49 @@ class _CategorySummaryViewState extends State<CategorySummaryView> {
     final largestExpense = entries.isNotEmpty && _categoryType == 'expense'
         ? entries.first
         : _expenseEntries().firstOrNull;
-    final savingTarget = double.tryParse(_savingTargetController.text) ?? 0;
     final periodExpenseMonthly = expense / _periodMonths;
+    final unitPrice = _readAmount(_unitPriceController);
+    final variableCost = _readAmount(_variableCostController);
+    final fixedCost = _readAmount(_monthlyFixedCostController);
+    final plannedUnits = _readAmount(_monthlyUnitsController);
+    final cashBalance = _readAmount(_cashBalanceController);
+    final scenarioSalesFactor = _scenario == 'sales_down' ? 0.8 : 1.0;
+    final scenarioCostFactor = _scenario == 'cost_up' ? 1.15 : 1.0;
+    final contributionPerUnit = unitPrice - variableCost * scenarioCostFactor;
+    final scenarioUnits = plannedUnits * scenarioSalesFactor;
+    final projectedProfit = contributionPerUnit * scenarioUnits - fixedCost;
+    final breakEvenUnits = contributionPerUnit > 0
+        ? (fixedCost / contributionPerUnit).ceil()
+        : null;
+    final displayedBreakEvenUnits = breakEvenUnits ?? 0;
+    final runwayDays = fixedCost > 0 && cashBalance > 0
+        ? cashBalance / fixedCost * 30
+        : null;
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         Row(
           children: [
-            const Expanded(
+            Expanded(
               child: Text(
-                'ช่วงเวลาสรุป',
+                AppText.tr(context, 'ช่วงเวลาสรุป'),
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
             DropdownButton<int>(
               value: _periodMonths,
-              items: const [1, 3, 6, 12]
+              items: [1, 3, 6, 12]
                   .map(
                     (months) => DropdownMenuItem(
                       value: months,
-                      child: Text('$months เดือน'),
+                      child: Text(
+                        AppText.tr(
+                          context,
+                          '$months เดือน',
+                          english: '$months months',
+                        ),
+                      ),
                     ),
                   )
                   .toList(),
@@ -108,17 +140,25 @@ class _CategorySummaryViewState extends State<CategorySummaryView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'ผลประกอบการในช่วงที่เลือก',
+                Text(
+                  AppText.tr(context, 'ผลประกอบการในช่วงที่เลือก'),
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    _summaryAmount('รายรับ', income, Colors.green.shade700),
-                    _summaryAmount('รายจ่าย', expense, Colors.deepOrange),
                     _summaryAmount(
-                      'คงเหลือ',
+                      AppText.tr(context, 'รายรับ'),
+                      income,
+                      Colors.green.shade700,
+                    ),
+                    _summaryAmount(
+                      AppText.tr(context, 'รายจ่าย'),
+                      expense,
+                      Colors.deepOrange,
+                    ),
+                    _summaryAmount(
+                      AppText.tr(context, 'คงเหลือ'),
                       net,
                       net >= 0 ? Colors.indigo : Colors.red,
                     ),
@@ -126,7 +166,12 @@ class _CategorySummaryViewState extends State<CategorySummaryView> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'เฉลี่ยรายจ่าย ฿${periodExpenseMonthly.toStringAsFixed(2)} ต่อเดือน',
+                  AppText.tr(
+                    context,
+                    'เฉลี่ยรายจ่าย ฿${periodExpenseMonthly.toStringAsFixed(2)} ต่อเดือน',
+                    english:
+                        'Average expenses: ฿${periodExpenseMonthly.toStringAsFixed(2)} per month',
+                  ),
                 ),
               ],
             ),
@@ -134,15 +179,15 @@ class _CategorySummaryViewState extends State<CategorySummaryView> {
         ),
         const SizedBox(height: 16),
         SegmentedButton<String>(
-          segments: const [
+          segments: [
             ButtonSegment(
               value: 'expense',
-              label: Text('รายจ่าย'),
+              label: Text(AppText.tr(context, 'รายจ่าย')),
               icon: Icon(Icons.trending_down),
             ),
             ButtonSegment(
               value: 'income',
-              label: Text('รายรับ'),
+              label: Text(AppText.tr(context, 'รายรับ')),
               icon: Icon(Icons.trending_up),
             ),
           ],
@@ -153,16 +198,18 @@ class _CategorySummaryViewState extends State<CategorySummaryView> {
         const SizedBox(height: 16),
         Text(
           _categoryType == 'expense'
-              ? 'จำแนกต้นทุนและค่าใช้จ่าย'
-              : 'จำแนกแหล่งรายรับ',
+              ? AppText.tr(context, 'จำแนกต้นทุนและค่าใช้จ่าย')
+              : AppText.tr(context, 'จำแนกแหล่งรายรับ'),
           style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
         if (entries.isEmpty)
-          const Card(
+          Card(
             child: Padding(
-              padding: EdgeInsets.all(16),
-              child: Text('ยังไม่มีรายการที่ยืนยันในช่วงเวลานี้'),
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                AppText.tr(context, 'ยังไม่มีรายการที่ยืนยันในช่วงเวลานี้'),
+              ),
             ),
           )
         else
@@ -176,7 +223,7 @@ class _CategorySummaryViewState extends State<CategorySummaryView> {
                     ? entry.value / categoryTotal
                     : 0.0;
                 return ListTile(
-                  title: Text(entry.key),
+                  title: Text(AppText.categoryLabel(context, entry.key)),
                   subtitle: Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: Column(
@@ -190,7 +237,12 @@ class _CategorySummaryViewState extends State<CategorySummaryView> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          '${(percent * 100).toStringAsFixed(1)}% ของยอดรวม',
+                          AppText.tr(
+                            context,
+                            '${(percent * 100).toStringAsFixed(1)}% ของยอดรวม',
+                            english:
+                                '${(percent * 100).toStringAsFixed(1)}% of total',
+                          ),
                         ),
                       ],
                     ),
@@ -201,15 +253,15 @@ class _CategorySummaryViewState extends State<CategorySummaryView> {
             ),
           ),
         const SizedBox(height: 16),
-        const Text(
-          'แนวทางจัดการธุรกิจ',
+        Text(
+          AppText.tr(context, 'แนวทางจัดการธุรกิจ'),
           style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
-        _buildAdviceCard(net, income, expense, largestExpense),
+        _buildAdviceCard(context, net, income, expense, largestExpense),
         const SizedBox(height: 16),
-        const Text(
-          'จำลองแผนลดค่าใช้จ่าย',
+        Text(
+          AppText.tr(context, 'ทดลองแผนธุรกิจ'),
           style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
@@ -219,52 +271,133 @@ class _CategorySummaryViewState extends State<CategorySummaryView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TextField(
-                  controller: _savingTargetController,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
+                Text(
+                  AppText.tr(
+                    context,
+                    'ลองปรับตัวเลขเพื่อดูจุดคุ้มทุนและกำไรโดยประมาณ',
                   ),
-                  decoration: const InputDecoration(
-                    labelText: 'ระบุจำนวนเงินที่ตั้งใจลดต่อเดือน',
-                    prefixText: '฿ ',
-                    border: OutlineInputBorder(),
-                  ),
-                  onChanged: (_) => setState(() {}),
                 ),
                 const SizedBox(height: 12),
-                DropdownButtonFormField<int>(
-                  initialValue: _planningMonths,
-                  decoration: const InputDecoration(
-                    labelText: 'ระยะเวลาที่ต้องการวางแผน',
+                DropdownButtonFormField<String>(
+                  initialValue: _scenario,
+                  decoration: InputDecoration(
+                    labelText: AppText.tr(context, 'สถานการณ์จำลอง'),
                     border: OutlineInputBorder(),
                   ),
-                  items: const [1, 3, 6, 12]
-                      .map(
-                        (months) => DropdownMenuItem(
-                          value: months,
-                          child: Text('$months เดือน'),
-                        ),
-                      )
-                      .toList(),
+                  items: [
+                    DropdownMenuItem(
+                      value: 'base',
+                      child: Text(AppText.tr(context, 'ตามแผน')),
+                    ),
+                    DropdownMenuItem(
+                      value: 'sales_down',
+                      child: Text(AppText.tr(context, 'ยอดขายลดลง 20%')),
+                    ),
+                    DropdownMenuItem(
+                      value: 'cost_up',
+                      child: Text(
+                        AppText.tr(context, 'ต้นทุนต่อชิ้นเพิ่ม 15%'),
+                      ),
+                    ),
+                  ],
                   onChanged: (value) {
-                    if (value != null) setState(() => _planningMonths = value);
+                    if (value != null) setState(() => _scenario = value);
                   },
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  'เงินที่ตั้งเป้าเก็บได้: '
-                  '฿${(savingTarget * _planningMonths).toStringAsFixed(2)} '
-                  'ใน $_planningMonths เดือน',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+                const SizedBox(height: 8),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final fieldWidth = constraints.maxWidth >= 600
+                        ? (constraints.maxWidth - 12) / 2
+                        : constraints.maxWidth;
+                    return Wrap(
+                      spacing: 12,
+                      runSpacing: 8,
+                      children: [
+                        _simulatorInput(
+                          controller: _unitPriceController,
+                          label: AppText.tr(context, 'ราคาขายต่อชิ้น'),
+                          width: fieldWidth,
+                        ),
+                        _simulatorInput(
+                          controller: _variableCostController,
+                          label: AppText.tr(context, 'ต้นทุนต่อชิ้น'),
+                          width: fieldWidth,
+                        ),
+                        _simulatorInput(
+                          controller: _monthlyFixedCostController,
+                          label: AppText.tr(context, 'ค่าใช้จ่ายประจำต่อเดือน'),
+                          width: fieldWidth,
+                        ),
+                        _simulatorInput(
+                          controller: _monthlyUnitsController,
+                          label: AppText.tr(
+                            context,
+                            'จำนวนขายที่คาดต่อเดือน (ชิ้น)',
+                          ),
+                          width: fieldWidth,
+                          currency: false,
+                        ),
+                        _simulatorInput(
+                          controller: _cashBalanceController,
+                          label: AppText.tr(context, 'เงินสดที่มี (ไม่บังคับ)'),
+                          width: fieldWidth,
+                        ),
+                      ],
+                    );
+                  },
                 ),
-                if (savingTarget > periodExpenseMonthly && expense > 0)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 8),
-                    child: Text(
-                      'เป้าหมายสูงกว่ารายจ่ายเฉลี่ยต่อเดือน ลองปรับเป้าให้สอดคล้องกับรายการจริง',
-                      style: TextStyle(color: Colors.deepOrange),
+                if (unitPrice > 0 && fixedCost > 0 && plannedUnits > 0) ...[
+                  const Divider(height: 24),
+                  Text(
+                    contributionPerUnit > 0
+                        ? AppText.tr(
+                            context,
+                            'จุดคุ้มทุนประมาณ $displayedBreakEvenUnits ชิ้น/เดือน (ยอดขาย ฿${(displayedBreakEvenUnits * unitPrice).toStringAsFixed(0)})',
+                            english:
+                                'Break-even: $displayedBreakEvenUnits units/month (sales ฿${(displayedBreakEvenUnits * unitPrice).toStringAsFixed(0)})',
+                          )
+                        : AppText.tr(
+                            context,
+                            'ต้นทุนต่อชิ้นสูงกว่าราคาขาย ยังหาจุดคุ้มทุนไม่ได้',
+                          ),
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    AppText.tr(
+                      context,
+                      'กำไรสุทธิตามสถานการณ์นี้: ฿${projectedProfit.toStringAsFixed(2)} / เดือน',
+                      english:
+                          'Estimated net profit: ฿${projectedProfit.toStringAsFixed(2)} / month',
+                    ),
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: projectedProfit >= 0
+                          ? Colors.green.shade700
+                          : Colors.red.shade700,
                     ),
                   ),
+                  if (runwayDays != null) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      AppText.tr(
+                        context,
+                        'เงินสดที่กรอกไว้อาจรองรับค่าใช้จ่ายประจำได้ประมาณ ${runwayDays.toStringAsFixed(0)} วัน (ยังไม่รวมรายรับใหม่)',
+                        english:
+                            'Entered cash may cover fixed costs for about ${runwayDays.toStringAsFixed(0)} days, excluding future income.',
+                      ),
+                    ),
+                  ],
+                ],
+                const SizedBox(height: 8),
+                Text(
+                  AppText.tr(
+                    context,
+                    'ผลจำลองเป็นค่าประมาณจากตัวเลขที่กรอก ไม่ใช่ยอดบัญชีจริง',
+                  ),
+                  style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
+                ),
               ],
             ),
           ),
@@ -273,6 +406,28 @@ class _CategorySummaryViewState extends State<CategorySummaryView> {
       ],
     );
   }
+
+  double _readAmount(TextEditingController controller) =>
+      double.tryParse(controller.text.trim().replaceAll(',', '')) ?? 0;
+
+  Widget _simulatorInput({
+    required TextEditingController controller,
+    required String label,
+    required double width,
+    bool currency = true,
+  }) => SizedBox(
+    width: width,
+    child: TextField(
+      controller: controller,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      decoration: InputDecoration(
+        labelText: label,
+        prefixText: currency ? '฿ ' : null,
+        border: const OutlineInputBorder(),
+      ),
+      onChanged: (_) => setState(() {}),
+    ),
+  );
 
   List<MapEntry<String, double>> _expenseEntries() {
     final totals = <String, double>{};
@@ -307,6 +462,7 @@ class _CategorySummaryViewState extends State<CategorySummaryView> {
   );
 
   Widget _buildAdviceCard(
+    BuildContext context,
     double net,
     double income,
     double expense,
@@ -314,28 +470,51 @@ class _CategorySummaryViewState extends State<CategorySummaryView> {
   ) {
     final advice = <String>[];
     if (income == 0 && expense == 0) {
-      advice.add('ยืนยันหรือเพิ่มรายการรับจ่ายเพื่อเริ่มสร้างแผนธุรกิจ');
+      advice.add(
+        AppText.tr(
+          context,
+          'ยืนยันหรือเพิ่มรายการรับจ่ายเพื่อเริ่มสร้างแผนธุรกิจ',
+          english: 'Confirm or add transactions to start building your business plan.',
+        ),
+      );
     } else if (net < 0) {
       advice.add(
-        'เงินออกสูงกว่าเงินเข้า ฿${(-net).toStringAsFixed(2)} ในช่วงนี้ '
-        'พักการซื้อที่ไม่เร่งด่วนและตรวจรายการจ่ายก้อนใหญ่',
+        AppText.tr(
+          context,
+          'เงินออกสูงกว่าเงินเข้า ฿${(-net).toStringAsFixed(2)} ในช่วงนี้ พักการซื้อที่ไม่เร่งด่วนและตรวจรายการจ่ายก้อนใหญ่',
+          english:
+              'Outflow exceeds inflow by ฿${(-net).toStringAsFixed(2)}. Pause nonessential purchases and review large expenses.',
+        ),
       );
     } else {
       advice.add(
-        'เงินคงเหลือเป็นบวก ฿${net.toStringAsFixed(2)} ในช่วงที่เลือก',
+        AppText.tr(
+          context,
+          'เงินคงเหลือเป็นบวก ฿${net.toStringAsFixed(2)} ในช่วงที่เลือก',
+          english:
+              'Net cash flow is positive at ฿${net.toStringAsFixed(2)} for this period.',
+        ),
       );
     }
     if (topExpense != null) {
       final share = expense > 0 ? topExpense.value / expense * 100 : 0.0;
       advice.add(
-        'หมวด ${topExpense.key} ใช้เงิน ${share.toStringAsFixed(1)}% ของรายจ่าย '
-        '(฿${topExpense.value.toStringAsFixed(2)}); ตรวจราคาซัพพลายเออร์และปริมาณซื้อ',
+        AppText.tr(
+          context,
+          'หมวด ${AppText.categoryLabel(context, topExpense.key)} ใช้เงิน ${share.toStringAsFixed(1)}% ของรายจ่าย (฿${topExpense.value.toStringAsFixed(2)}); ตรวจราคาซัพพลายเออร์และปริมาณซื้อ',
+          english:
+              '${AppText.categoryLabel(context, topExpense.key)} accounts for ${share.toStringAsFixed(1)}% of expenses (฿${topExpense.value.toStringAsFixed(2)}). Review supplier prices and order quantities.',
+        ),
       );
     }
     if (income > 0 && expense / income > 0.8) {
       advice.add(
-        'รายจ่ายคิดเป็น ${(expense / income * 100).toStringAsFixed(1)}% ของรายรับ '
-        'ควรสำรองเงินสำหรับค่าใช้จ่ายจำเป็นก่อนนำเงินไปขยายกิจการ',
+        AppText.tr(
+          context,
+          'รายจ่ายคิดเป็น ${(expense / income * 100).toStringAsFixed(1)}% ของรายรับ ควรสำรองเงินสำหรับค่าใช้จ่ายจำเป็นก่อนนำเงินไปขยายกิจการ',
+          english:
+              'Expenses are ${(expense / income * 100).toStringAsFixed(1)}% of income. Reserve essential costs before expanding.',
+        ),
       );
     }
     return Card(

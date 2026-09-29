@@ -3,17 +3,26 @@
 
 import 'package:flutter/material.dart';
 
+import '../control/app_preferences.dart';
 import '../control/account_controller.dart';
+import '../l10n/app_text.dart';
 import '../service/auth_service.dart';
 import 'category_summary_view.dart';
 import 'dashboard_view.dart';
 import 'review_view.dart';
 import 'roi_analytics_view.dart';
+import 'settings_view.dart';
 import 'wallet_budget_view.dart';
 
 class MainScreen extends StatefulWidget {
   final String userId;
-  const MainScreen({super.key, required this.userId});
+  final AppPreferences preferences;
+
+  const MainScreen({
+    super.key,
+    required this.userId,
+    required this.preferences,
+  });
 
   @override
   State<MainScreen> createState() => _MainScreenState();
@@ -41,27 +50,38 @@ class _MainScreenState extends State<MainScreen> {
       animation: _controller,
       builder: (context, child) {
         final pages = [
-          DashboardView(controller: _controller),
+          DashboardView(
+            controller: _controller,
+            onOpenReviewPending: () => _showReviewSheet(context),
+            preferences: widget.preferences,
+          ),
           CategorySummaryView(controller: _controller, type: 'all'),
-          RoiAnalyticsView(controller: _controller),
           WalletBudgetView(controller: _controller),
-          ReviewView(controller: _controller),
+          SettingsView(
+            controller: _controller,
+            preferences: widget.preferences,
+          ),
         ];
 
         final titles = [
           'Dashboard บัญชี AI',
-          'ธุรกิจรายย่อย',
-          'วิเคราะห์การใช้เงิน',
+          'วิเคราะห์',
           'กระเป๋าเงิน & งบประมาณ',
-          'งานที่ต้องทำ',
+          'ตั้งค่า',
         ];
 
         return Scaffold(
           appBar: AppBar(
-            title: Text(titles[_currentIndex]),
+            title: Text(AppText.tr(context, titles[_currentIndex])),
             actions: [
+              if (_currentIndex == 1)
+                IconButton(
+                  tooltip: AppText.tr(context, 'ดูกราฟและแนวโน้ม'),
+                  icon: const Icon(Icons.bar_chart_outlined),
+                  onPressed: () => _showAnalyticsSheet(context),
+                ),
               PopupMenuButton<String>(
-                tooltip: 'เลือกสมุดบัญชี',
+                tooltip: AppText.tr(context, 'เลือกสมุดบัญชี'),
                 icon: const Icon(Icons.menu_book_outlined),
                 onSelected: (value) {
                   if (value == '__create_booklet__') {
@@ -84,9 +104,9 @@ class _MainScreenState extends State<MainScreen> {
                     ),
                   ),
                   const PopupMenuDivider(),
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: '__create_booklet__',
-                    child: Text('สร้างสมุดบัญชีใหม่'),
+                    child: Text(AppText.tr(context, 'สร้างสมุดบัญชีใหม่')),
                   ),
                 ],
               ),
@@ -104,29 +124,21 @@ class _MainScreenState extends State<MainScreen> {
             currentIndex: _currentIndex,
             onTap: (index) => setState(() => _currentIndex = index),
             items: [
-              const BottomNavigationBarItem(
+              BottomNavigationBarItem(
                 icon: Icon(Icons.dashboard),
-                label: 'Dashboard',
-              ),
-              const BottomNavigationBarItem(
-                icon: Icon(Icons.business_center_outlined),
-                label: 'ธุรกิจรายย่อย',
-              ),
-              const BottomNavigationBarItem(
-                icon: Icon(Icons.analytics_outlined),
-                label: 'วิเคราะห์เงิน',
-              ),
-              const BottomNavigationBarItem(
-                icon: Icon(Icons.account_balance_wallet_outlined),
-                label: 'Wallet',
+                label: AppText.tr(context, 'Dashboard'),
               ),
               BottomNavigationBarItem(
-                icon: Badge(
-                  label: Text('${_controller.actionCount}'),
-                  isLabelVisible: _controller.actionCount > 0,
-                  child: const Icon(Icons.fact_check),
-                ),
-                label: 'งาน',
+                icon: Icon(Icons.business_center_outlined),
+                label: AppText.tr(context, 'วิเคราะห์'),
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.account_balance_wallet_outlined),
+                label: AppText.tr(context, 'Wallet'),
+              ),
+              BottomNavigationBarItem(
+                icon: const Icon(Icons.settings_outlined),
+                label: AppText.tr(context, 'ตั้งค่า'),
               ),
             ],
           ),
@@ -135,23 +147,55 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+  void _showAnalyticsSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (context) => SizedBox(
+        height: MediaQuery.sizeOf(context).height * 0.9,
+        child: RoiAnalyticsView(
+          controller: _controller,
+          preferences: widget.preferences,
+        ),
+      ),
+    );
+  }
+
+  void _showReviewSheet(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (context) => SizedBox(
+        height: MediaQuery.sizeOf(context).height * 0.9,
+        child: ReviewView(controller: _controller),
+      ),
+    );
+  }
+
   void _showCreateBookletDialog(BuildContext context) {
     final nameController = TextEditingController();
     showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('สร้างสมุดบัญชี'),
+        title: Text(AppText.tr(context, 'สร้างสมุดบัญชี')),
         content: TextField(
           controller: nameController,
           autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'ชื่อสมุด เช่น เงินส่วนตัว หรือ ทริปเชียงใหม่',
+          decoration: InputDecoration(
+            labelText: AppText.tr(
+              context,
+              'ชื่อสมุด เช่น เงินส่วนตัว หรือ ทริปเชียงใหม่',
+            ),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('ยกเลิก'),
+            child: Text(AppText.tr(context, 'ยกเลิก')),
           ),
           FilledButton(
             onPressed: () async {
@@ -160,7 +204,7 @@ class _MainScreenState extends State<MainScreen> {
               await _controller.createBooklet(name);
               if (dialogContext.mounted) Navigator.pop(dialogContext);
             },
-            child: const Text('สร้าง'),
+            child: Text(AppText.tr(context, 'สร้าง')),
           ),
         ],
       ),

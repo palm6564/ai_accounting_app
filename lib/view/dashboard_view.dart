@@ -3,14 +3,23 @@
 
 import 'package:flutter/material.dart';
 
+import '../control/app_preferences.dart';
 import '../control/account_controller.dart';
+import '../l10n/app_text.dart';
 import '../model/transaction.dart';
 import '../service/api_service.dart';
 
 class DashboardView extends StatelessWidget {
   final AccountController controller;
+  final VoidCallback? onOpenReviewPending;
+  final AppPreferences? preferences;
 
-  const DashboardView({super.key, required this.controller});
+  const DashboardView({
+    super.key,
+    required this.controller,
+    this.onOpenReviewPending,
+    this.preferences,
+  });
 
   Future<void> _handleUpload(BuildContext context) async {
     try {
@@ -18,7 +27,15 @@ class DashboardView extends StatelessWidget {
       if (images.isEmpty || !context.mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('กำลังอ่านสลิปจำนวน ${images.length} ใบ...')),
+        SnackBar(
+          content: Text(
+            AppText.tr(
+              context,
+              'กำลังอ่านสลิปจำนวน ${images.length} ใบ...',
+              english: 'Reading ${images.length} slip(s)...',
+            ),
+          ),
+        ),
       );
       final result = await ApiService.processAndSaveSlips(
         images,
@@ -28,14 +45,30 @@ class DashboardView extends StatelessWidget {
       if (!context.mounted) return;
 
       final summary = StringBuffer(
-        'บันทึก ${result.savedCount} ใบ • ซ้ำ ${result.duplicateCount} ใบ',
+        AppText.tr(
+          context,
+          'บันทึก ${result.savedCount} ใบ • ซ้ำ ${result.duplicateCount} ใบ',
+          english:
+              'Saved ${result.savedCount} • duplicates ${result.duplicateCount}',
+        ),
       );
       if (result.offlineCount > 0) {
-        summary.write(' • Offline รอตรวจ ${result.offlineCount} ใบ');
+        summary.write(
+          AppText.tr(
+            context,
+            ' • Offline รอตรวจ ${result.offlineCount} ใบ',
+            english: ' • Offline review ${result.offlineCount}',
+          ),
+        );
       }
       if (result.errors.isNotEmpty) {
         summary.write(
-          ' • ล้มเหลว ${result.errors.length} ใบ: ${result.errors.first}',
+          AppText.tr(
+            context,
+            ' • ล้มเหลว ${result.errors.length} ใบ: ${result.errors.first}',
+            english:
+                ' • Failed ${result.errors.length}: ${result.errors.first}',
+          ),
         );
       }
       ScaffoldMessenger.of(context)
@@ -45,7 +78,13 @@ class DashboardView extends StatelessWidget {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text('อัปโหลดสลิปไม่สำเร็จ: $error')));
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              '${AppText.tr(context, 'อัปโหลดสลิปไม่สำเร็จ')}: $error',
+            ),
+          ),
+        );
     }
   }
 
@@ -82,6 +121,10 @@ class DashboardView extends StatelessWidget {
     final noteController = TextEditingController(text: item.note);
     String selectedType = item.type;
     String selectedCategory = item.category;
+    final availableCategories = {
+      ...controller.categoryTags,
+      selectedCategory,
+    }.toList();
 
     showModalBottomSheet(
       context: context,
@@ -104,8 +147,8 @@ class DashboardView extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    'แก้ไข / ลบ รายการเก่า',
+                  Text(
+                    AppText.tr(context, 'แก้ไข / ลบ รายการเก่า'),
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   IconButton(
@@ -117,39 +160,43 @@ class DashboardView extends StatelessWidget {
               const Divider(),
               TextField(
                 controller: titleController,
-                decoration: const InputDecoration(labelText: 'ชื่อรายการ'),
+                decoration: InputDecoration(
+                  labelText: AppText.tr(context, 'ชื่อรายการ'),
+                ),
               ),
               TextField(
                 controller: amountController,
-                decoration: const InputDecoration(labelText: 'จำนวนเงิน (บาท)'),
+                decoration: InputDecoration(
+                  labelText: AppText.tr(context, 'จำนวนเงิน (บาท)'),
+                ),
                 keyboardType: const TextInputType.numberWithOptions(
                   decimal: true,
                 ),
               ),
               const SizedBox(height: 12),
 
-              const Text(
-                'ประเภทรายการ:',
+              Text(
+                AppText.tr(context, 'ประเภทรายการ:'),
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               Row(
                 children: [
                   ChoiceChip(
-                    label: const Text('รายจ่าย'),
+                    label: Text(AppText.tr(context, 'รายจ่าย')),
                     selected: selectedType == 'expense',
                     onSelected: (val) =>
                         setModalState(() => selectedType = 'expense'),
                   ),
                   const SizedBox(width: 8),
                   ChoiceChip(
-                    label: const Text('รายรับ'),
+                    label: Text(AppText.tr(context, 'รายรับ')),
                     selected: selectedType == 'income',
                     onSelected: (val) =>
                         setModalState(() => selectedType = 'income'),
                   ),
                   const SizedBox(width: 8),
                   ChoiceChip(
-                    label: const Text('โอนภายใน'),
+                    label: Text(AppText.tr(context, 'โอนภายใน')),
                     selected: selectedType == 'internal_transfer',
                     onSelected: (val) =>
                         setModalState(() => selectedType = 'internal_transfer'),
@@ -158,15 +205,15 @@ class DashboardView extends StatelessWidget {
               ),
               const SizedBox(height: 12),
 
-              const Text(
-                'หมวดหมู่:',
+              Text(
+                AppText.tr(context, 'หมวดหมู่:'),
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               Wrap(
                 spacing: 8,
-                children: ['วัตถุดิบ', 'ค่าแรง', 'ลูกค้า', 'ทั่วไป'].map((cat) {
+                children: availableCategories.map((cat) {
                   return ChoiceChip(
-                    label: Text(cat),
+                    label: Text(AppText.categoryLabel(context, cat)),
                     selected: selectedCategory == cat,
                     onSelected: (selected) =>
                         setModalState(() => selectedCategory = cat),
@@ -176,7 +223,9 @@ class DashboardView extends StatelessWidget {
 
               TextField(
                 controller: noteController,
-                decoration: const InputDecoration(labelText: 'หมายเหตุ'),
+                decoration: InputDecoration(
+                  labelText: AppText.tr(context, 'หมายเหตุ'),
+                ),
               ),
               const SizedBox(height: 24),
 
@@ -190,7 +239,7 @@ class DashboardView extends StatelessWidget {
                         if (context.mounted) Navigator.pop(ctx);
                       },
                       icon: const Icon(Icons.delete, color: Colors.white),
-                      label: const Text('ลบรายการ'),
+                      label: Text(AppText.tr(context, 'ลบรายการ')),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.red,
                         foregroundColor: Colors.white,
@@ -215,7 +264,7 @@ class DashboardView extends StatelessWidget {
                         if (context.mounted) Navigator.pop(ctx);
                       },
                       icon: const Icon(Icons.save, color: Colors.white),
-                      label: const Text('บันทึกแก้ไข'),
+                      label: Text(AppText.tr(context, 'บันทึกแก้ไข')),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.indigo,
                         foregroundColor: Colors.white,
@@ -241,6 +290,26 @@ class DashboardView extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (controller.pendingCount > 0) ...[
+              Card(
+                child: ListTile(
+                  leading: Badge(
+                    label: Text('${controller.pendingCount}'),
+                    child: const Icon(Icons.receipt_long_outlined),
+                  ),
+                  title: Text(AppText.tr(context, 'มีรายการรอตรวจ')),
+                  subtitle: Text(
+                    AppText.tr(
+                      context,
+                      'ตรวจยอดและรายละเอียดสลิปก่อนยืนยันลงบัญชี',
+                    ),
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: onOpenReviewPending,
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
             // การ์ดงบกำไร - ขาดทุน + ROI Tracker
             Card(
               color: Colors.indigo.shade900,
@@ -251,8 +320,8 @@ class DashboardView extends StatelessWidget {
                 padding: const EdgeInsets.all(20.0),
                 child: Column(
                   children: [
-                    const Text(
-                      'สรุปงบกำไร - ขาดทุน สุทธิ',
+                    Text(
+                      AppText.tr(context, 'สรุปงบกำไร - ขาดทุน สุทธิ'),
                       style: TextStyle(color: Colors.white70, fontSize: 15),
                     ),
                     const SizedBox(height: 8),
@@ -274,8 +343,8 @@ class DashboardView extends StatelessWidget {
                       children: [
                         Column(
                           children: [
-                            const Text(
-                              'รายรับรวม',
+                            Text(
+                              AppText.tr(context, 'รายรับรวม'),
                               style: TextStyle(
                                 color: Colors.white70,
                                 fontSize: 13,
@@ -294,8 +363,8 @@ class DashboardView extends StatelessWidget {
                         ),
                         Column(
                           children: [
-                            const Text(
-                              'รายจ่ายรวม',
+                            Text(
+                              AppText.tr(context, 'รายจ่ายรวม'),
                               style: TextStyle(
                                 color: Colors.white70,
                                 fontSize: 13,
@@ -331,12 +400,15 @@ class DashboardView extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Row(
+                    Row(
                       children: [
                         Icon(Icons.psychology, color: Colors.purple),
                         SizedBox(width: 8),
                         Text(
-                          'AI ที่ปรึกษาการเงินธุรกิจรายย่อย',
+                          AppText.tr(
+                            context,
+                            'AI ที่ปรึกษาการเงินธุรกิจรายย่อย',
+                          ),
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -347,7 +419,11 @@ class DashboardView extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      controller.generateAIAdvice(),
+                      controller.generateAIAdvice(
+                        english:
+                            Localizations.localeOf(context).languageCode ==
+                            'en',
+                      ),
                       style: const TextStyle(
                         fontSize: 14,
                         height: 1.4,
@@ -366,12 +442,20 @@ class DashboardView extends StatelessWidget {
                   Icons.emoji_emotions_outlined,
                   color: Colors.teal,
                 ),
-                title: const Text('ผู้ช่วยบันทึกการเงิน'),
+                title: Text(AppText.tr(context, 'ผู้ช่วยบันทึกการเงิน')),
                 subtitle: Text(
                   _recordingStreak() == 0
-                      ? 'วันนี้ยังไม่มีรายการที่ยืนยัน เริ่มจดรายการเพื่อให้เห็นกระแสเงินสดครบขึ้น'
-                      : 'บันทึกต่อเนื่อง ${_recordingStreak()} วันแล้ว '
-                            'ข้อมูลครบช่วยให้คำแนะนำและรายงานแม่นขึ้น',
+                      ? AppText.tr(
+                          context,
+                          'วันนี้ยังไม่มีรายการที่ยืนยัน เริ่มจดรายการเพื่อให้เห็นกระแสเงินสดครบขึ้น',
+                          english: 'No confirmed transactions today. Record one to keep your cash flow up to date.',
+                        )
+                      : AppText.tr(
+                          context,
+                          'บันทึกต่อเนื่อง ${_recordingStreak()} วันแล้ว ข้อมูลครบช่วยให้คำแนะนำและรายงานแม่นขึ้น',
+                          english:
+                              'You have recorded transactions for ${_recordingStreak()} days. Complete data improves insights.',
+                        ),
                 ),
               ),
             ),
@@ -384,7 +468,7 @@ class DashboardView extends StatelessWidget {
               child: ElevatedButton.icon(
                 onPressed: () => _handleUpload(context),
                 icon: const Icon(Icons.add_photo_alternate),
-                label: const Text('อัปโหลดสลิปเพื่อบันทึกบัญชี'),
+                label: Text(AppText.tr(context, 'อัปโหลดสลิปเพื่อบันทึกบัญชี')),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.indigo,
                   foregroundColor: Colors.white,
@@ -393,18 +477,18 @@ class DashboardView extends StatelessWidget {
             ),
             const SizedBox(height: 24),
 
-            const Text(
-              'ประวัติรายการบัญชี (กดเพื่อแก้ไข/ลบ)',
+            Text(
+              AppText.tr(context, 'ประวัติรายการบัญชี (กดเพื่อแก้ไข/ลบ)'),
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
 
             // รายการธุรกรรมทั้งหมด
             controller.transactions.isEmpty
-                ? const Center(
+                ? Center(
                     child: Padding(
-                      padding: EdgeInsets.all(24.0),
-                      child: Text('ยังไม่มีรายการสลิป'),
+                      padding: const EdgeInsets.all(24.0),
+                      child: Text(AppText.tr(context, 'ยังไม่มีรายการสลิป')),
                     ),
                   )
                 : ListView.builder(
@@ -446,14 +530,14 @@ class DashboardView extends StatelessWidget {
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                           subtitle: Text(
-                            'หมวด: ${item.category} • ${item.date.day}/${item.date.month}/${item.date.year}',
+                            '${AppText.tr(context, 'หมวด')}: ${item.category} • ${AppText.formatDate(context, item.date, useBuddhistYear: preferences?.useBuddhistYear ?? true)}',
                           ),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
                                 isInternal
-                                    ? 'โอนภายใน'
+                                    ? AppText.tr(context, 'โอนภายใน')
                                     : '${item.type == 'expense' ? '-' : '+'}฿${item.amount.toStringAsFixed(2)}',
                                 style: TextStyle(
                                   color: isInternal

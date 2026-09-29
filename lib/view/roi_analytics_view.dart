@@ -3,29 +3,27 @@
 
 import 'package:flutter/material.dart';
 
+import '../control/app_preferences.dart';
 import '../control/account_controller.dart';
+import '../l10n/app_text.dart';
 import '../model/transaction.dart';
 
 class RoiAnalyticsView extends StatefulWidget {
   final AccountController controller;
+  final AppPreferences? preferences;
 
-  const RoiAnalyticsView({super.key, required this.controller});
+  const RoiAnalyticsView({
+    super.key,
+    required this.controller,
+    this.preferences,
+  });
 
   @override
   State<RoiAnalyticsView> createState() => _RoiAnalyticsViewState();
 }
 
 class _RoiAnalyticsViewState extends State<RoiAnalyticsView> {
-  final TextEditingController _monthlySavingController =
-      TextEditingController();
   int _periodMonths = 3;
-  int _planningMonths = 6;
-
-  @override
-  void dispose() {
-    _monthlySavingController.dispose();
-    super.dispose();
-  }
 
   DateTime _monthStart(DateTime date, int offset) =>
       DateTime(date.year, date.month + offset);
@@ -75,10 +73,8 @@ class _RoiAnalyticsViewState extends State<RoiAnalyticsView> {
         ? ((expense - previousExpense) / previousExpense) * 100
         : null;
     final netMargin = income > 0 ? (netCashFlow / income) * 100 : 0.0;
-    final savingPerMonth = double.tryParse(_monthlySavingController.text) ?? 0;
-
-    final expensesByCategory = <String, double>{};
     final previousExpensesByCategory = <String, double>{};
+    final expensesByCategory = <String, double>{};
     for (final transaction in current.where((item) => item.type == 'expense')) {
       expensesByCategory.update(
         transaction.category,
@@ -125,7 +121,7 @@ class _RoiAnalyticsViewState extends State<RoiAnalyticsView> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('วิเคราะห์การใช้เงิน'),
+        title: Text(AppText.tr(context, 'วิเคราะห์การใช้เงิน')),
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
       ),
@@ -134,19 +130,25 @@ class _RoiAnalyticsViewState extends State<RoiAnalyticsView> {
         children: [
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
-                  'ช่วงเวลาวิเคราะห์',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                  AppText.tr(context, 'ช่วงเวลาวิเคราะห์'),
+                  style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               ),
               DropdownButton<int>(
                 value: _periodMonths,
-                items: const [1, 3, 6, 12]
+                items: [1, 3, 6, 12]
                     .map(
                       (months) => DropdownMenuItem(
                         value: months,
-                        child: Text('$months เดือนล่าสุด'),
+                        child: Text(
+                          AppText.tr(
+                            context,
+                            '$months เดือนล่าสุด',
+                            english: 'Last $months months',
+                          ),
+                        ),
                       ),
                     )
                     .toList(),
@@ -157,7 +159,7 @@ class _RoiAnalyticsViewState extends State<RoiAnalyticsView> {
             ],
           ),
           Text(
-            '${_formatMonth(currentStart)} - ${_formatMonth(_monthStart(now, 0))}',
+            '${_formatMonth(context, currentStart)} - ${_formatMonth(context, _monthStart(now, 0))}',
             style: TextStyle(color: Colors.grey.shade700),
           ),
           const SizedBox(height: 12),
@@ -165,14 +167,31 @@ class _RoiAnalyticsViewState extends State<RoiAnalyticsView> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              _metric('รายรับ', income, Colors.green.shade700),
-              _metric('รายจ่าย', expense, Colors.deepOrange),
-              _metric('เงินสุทธิ', netCashFlow, Colors.indigo),
-              _metric('อัตรากำไรสุทธิ', netMargin, Colors.teal, suffix: '%'),
+              _metric(
+                AppText.tr(context, 'รายรับ'),
+                income,
+                Colors.green.shade700,
+              ),
+              _metric(
+                AppText.tr(context, 'รายจ่าย'),
+                expense,
+                Colors.deepOrange,
+              ),
+              _metric(
+                AppText.tr(context, 'เงินสุทธิ'),
+                netCashFlow,
+                Colors.indigo,
+              ),
+              _metric(
+                AppText.tr(context, 'อัตรากำไรสุทธิ'),
+                netMargin,
+                Colors.teal,
+                suffix: '%',
+              ),
             ],
           ),
           const SizedBox(height: 20),
-          _sectionTitle('กระแสเงินสดรายเดือน'),
+          _sectionTitle(AppText.tr(context, 'กระแสเงินสดรายเดือน')),
           Card(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 16, 12, 12),
@@ -183,11 +202,17 @@ class _RoiAnalyticsViewState extends State<RoiAnalyticsView> {
                     child: _CashFlowChart(months: monthlyData),
                   ),
                   const SizedBox(height: 10),
-                  const Wrap(
+                  Wrap(
                     spacing: 16,
                     children: [
-                      _Legend(color: Colors.green, label: 'รายรับ'),
-                      _Legend(color: Colors.deepOrange, label: 'รายจ่าย'),
+                      _Legend(
+                        color: Colors.green,
+                        label: AppText.tr(context, 'รายรับ'),
+                      ),
+                      _Legend(
+                        color: Colors.deepOrange,
+                        label: AppText.tr(context, 'รายจ่าย'),
+                      ),
                     ],
                   ),
                 ],
@@ -195,7 +220,7 @@ class _RoiAnalyticsViewState extends State<RoiAnalyticsView> {
             ),
           ),
           const SizedBox(height: 16),
-          _sectionTitle('เปรียบเทียบช่วงก่อนหน้า'),
+          _sectionTitle(AppText.tr(context, 'เปรียบเทียบช่วงก่อนหน้า')),
           Card(
             child: Column(
               children: [
@@ -208,11 +233,19 @@ class _RoiAnalyticsViewState extends State<RoiAnalyticsView> {
                         ? Colors.green
                         : Colors.deepOrange,
                   ),
-                  title: const Text('รายจ่ายเทียบช่วงก่อนหน้า'),
+                  title: Text(AppText.tr(context, 'รายจ่ายเทียบช่วงก่อนหน้า')),
                   subtitle: Text(
                     expenseChange == null
-                        ? 'ยังไม่มีข้อมูลช่วงก่อนหน้าให้เปรียบเทียบ'
-                        : '${expenseChange.abs().toStringAsFixed(1)}% ${expenseChange > 0 ? 'เพิ่มขึ้น' : 'ลดลง'}',
+                        ? AppText.tr(
+                            context,
+                            'ยังไม่มีข้อมูลช่วงก่อนหน้าให้เปรียบเทียบ',
+                          )
+                        : AppText.tr(
+                            context,
+                            '${expenseChange.abs().toStringAsFixed(1)}% ${expenseChange > 0 ? 'เพิ่มขึ้น' : 'ลดลง'}',
+                            english:
+                                '${expenseChange.abs().toStringAsFixed(1)}% ${expenseChange > 0 ? 'increase' : 'decrease'}',
+                          ),
                   ),
                 ),
                 const Divider(height: 1),
@@ -221,21 +254,31 @@ class _RoiAnalyticsViewState extends State<RoiAnalyticsView> {
                     Icons.compare_arrows,
                     color: Colors.indigo,
                   ),
-                  title: const Text('เงินสุทธิช่วงนี้'),
+                  title: Text(AppText.tr(context, 'เงินสุทธิช่วงนี้')),
                   subtitle: Text(
-                    '฿${netCashFlow.toStringAsFixed(2)} เทียบกับ ฿${(previousIncome - previousExpense).toStringAsFixed(2)} ในช่วงก่อนหน้า',
+                    AppText.tr(
+                      context,
+                      '฿${netCashFlow.toStringAsFixed(2)} เทียบกับ ฿${(previousIncome - previousExpense).toStringAsFixed(2)} ในช่วงก่อนหน้า',
+                      english:
+                          '฿${netCashFlow.toStringAsFixed(2)} vs ฿${(previousIncome - previousExpense).toStringAsFixed(2)} in the previous period',
+                    ),
                   ),
                 ),
               ],
             ),
           ),
           const SizedBox(height: 16),
-          _sectionTitle('แจกแจงรายจ่ายตามหมวด'),
+          _sectionTitle(AppText.tr(context, 'แจกแจงรายจ่ายตามหมวด')),
           if (rankedCategories.isEmpty)
-            const Card(
+            Card(
               child: Padding(
-                padding: EdgeInsets.all(16),
-                child: Text('ยังไม่มีรายการรายจ่ายที่ยืนยันแล้วในช่วงนี้'),
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  AppText.tr(
+                    context,
+                    'ยังไม่มีรายการรายจ่ายที่ยืนยันแล้วในช่วงนี้',
+                  ),
+                ),
               ),
             )
           else
@@ -248,7 +291,7 @@ class _RoiAnalyticsViewState extends State<RoiAnalyticsView> {
                       ? ((entry.value - oldValue) / oldValue) * 100
                       : null;
                   return ListTile(
-                    title: Text(entry.key),
+                    title: Text(AppText.categoryLabel(context, entry.key)),
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -256,8 +299,12 @@ class _RoiAnalyticsViewState extends State<RoiAnalyticsView> {
                         LinearProgressIndicator(value: share),
                         const SizedBox(height: 4),
                         Text(
-                          '${(share * 100).toStringAsFixed(1)}% ของรายจ่าย'
-                          '${change == null ? '' : ' • ${change >= 0 ? '+' : ''}${change.toStringAsFixed(1)}% เทียบช่วงก่อน'}',
+                          AppText.tr(
+                            context,
+                            '${(share * 100).toStringAsFixed(1)}% ของรายจ่าย${change == null ? '' : ' • ${change >= 0 ? '+' : ''}${change.toStringAsFixed(1)}% เทียบช่วงก่อน'}',
+                            english:
+                                '${(share * 100).toStringAsFixed(1)}% of expenses${change == null ? '' : ' • ${change >= 0 ? '+' : ''}${change.toStringAsFixed(1)}% vs previous period'}',
+                          ),
                         ),
                       ],
                     ),
@@ -267,79 +314,19 @@ class _RoiAnalyticsViewState extends State<RoiAnalyticsView> {
               ),
             ),
           const SizedBox(height: 16),
-          _sectionTitle('คำแนะนำจากรายการจริง'),
+          _sectionTitle(AppText.tr(context, 'คำแนะนำจากรายการจริง')),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Text(
                 _recommendation(
+                  context,
                   income: income,
                   expense: expense,
                   netCashFlow: netCashFlow,
                   topCategory: topCategory,
                   highestExpense: highestExpense,
                 ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          _sectionTitle('ทดลองวางแผนจากจำนวนเงิน'),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TextField(
-                    controller: _monthlySavingController,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    decoration: const InputDecoration(
-                      labelText: 'ตั้งเป้าลดรายจ่ายต่อเดือน (บาท)',
-                      prefixText: '฿ ',
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (_) => setState(() {}),
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<int>(
-                    initialValue: _planningMonths,
-                    decoration: const InputDecoration(
-                      labelText: 'ระยะเวลาวางแผน',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: const [1, 3, 6, 12]
-                        .map(
-                          (months) => DropdownMenuItem(
-                            value: months,
-                            child: Text('$months เดือน'),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) {
-                      if (value != null) {
-                        setState(() => _planningMonths = value);
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'หากทำได้ตามเป้า จะเหลือเงินเพิ่มประมาณ '
-                    '฿${(savingPerMonth * _planningMonths).toStringAsFixed(2)} '
-                    'ใน $_planningMonths เดือน (ยังไม่รวมการเปลี่ยนแปลงรายรับ)',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  if (topCategory != null && savingPerMonth > 0) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      'หมวดที่มีรายจ่ายสูงสุดคือ ${topCategory.key}; '
-                      'เป้าลดรายจ่ายคิดเป็น '
-                      '${topCategory.value > 0 ? (savingPerMonth / topCategory.value * 100).toStringAsFixed(1) : '0.0'}% '
-                      'ของยอดหมวดนี้ในช่วงที่เลือก.',
-                    ),
-                  ],
-                ],
               ),
             ),
           ),
@@ -385,9 +372,15 @@ class _RoiAnalyticsViewState extends State<RoiAnalyticsView> {
     ),
   );
 
-  String _formatMonth(DateTime month) => '${month.month}/${month.year}';
+  String _formatMonth(BuildContext context, DateTime month) =>
+      AppText.formatMonth(
+        context,
+        month,
+        useBuddhistYear: widget.preferences?.useBuddhistYear ?? true,
+      );
 
-  String _recommendation({
+  String _recommendation(
+    BuildContext context, {
     required double income,
     required double expense,
     required double netCashFlow,
@@ -395,24 +388,37 @@ class _RoiAnalyticsViewState extends State<RoiAnalyticsView> {
     required TransactionModel? highestExpense,
   }) {
     if (income == 0 && expense == 0) {
-      return 'ยังไม่มีรายการที่ยืนยันในช่วงนี้ เพิ่มหรือยืนยันรายการเพื่อเริ่มวิเคราะห์';
+      return AppText.tr(
+        context,
+        'ยังไม่มีรายการที่ยืนยันในช่วงนี้ เพิ่มหรือยืนยันรายการเพื่อเริ่มวิเคราะห์',
+        english: 'No confirmed transactions in this period. Add or confirm transactions to start analysis.',
+      );
     }
     if (netCashFlow < 0) {
-      return 'รายจ่ายสูงกว่ารายรับ ฿${(-netCashFlow).toStringAsFixed(2)} '
-          'ในช่วงที่เลือก เริ่มตรวจหมวด ${topCategory?.key ?? 'รายจ่าย'} '
-          'ซึ่งใช้เงิน ฿${(topCategory?.value ?? 0).toStringAsFixed(2)} ก่อน';
+      return AppText.tr(
+        context,
+        'รายจ่ายสูงกว่ารายรับ ฿${(-netCashFlow).toStringAsFixed(2)} ในช่วงที่เลือก เริ่มตรวจหมวด ${AppText.categoryLabel(context, topCategory?.key ?? 'รายจ่าย')} ซึ่งใช้เงิน ฿${(topCategory?.value ?? 0).toStringAsFixed(2)} ก่อน',
+        english:
+            'Expenses exceed income by ฿${(-netCashFlow).toStringAsFixed(2)}. Start by reviewing ${AppText.categoryLabel(context, topCategory?.key ?? 'รายจ่าย')} (฿${(topCategory?.value ?? 0).toStringAsFixed(2)}).',
+      );
     }
     if (topCategory != null && expense > 0) {
       final share = topCategory.value / expense * 100;
       final largestMessage = highestExpense == null
           ? ''
-          : ' รายการรายจ่ายสูงสุดคือ "${highestExpense.title}" '
-                '฿${highestExpense.amount.toStringAsFixed(2)}.';
-      return 'เงินสุทธิเป็นบวก ฿${netCashFlow.toStringAsFixed(2)}. '
-          'หมวด ${topCategory.key} ใช้ ${share.toStringAsFixed(1)}% '
-          'ของรายจ่ายทั้งหมด พิจารณาตรวจราคา/ปริมาณซื้อในหมวดนี้.$largestMessage';
+          : ' รายการรายจ่ายสูงสุดคือ "${highestExpense.title}" ฿${highestExpense.amount.toStringAsFixed(2)}.';
+      return AppText.tr(
+        context,
+        'เงินสุทธิเป็นบวก ฿${netCashFlow.toStringAsFixed(2)}. หมวด ${AppText.categoryLabel(context, topCategory.key)} ใช้ ${share.toStringAsFixed(1)}% ของรายจ่ายทั้งหมด พิจารณาตรวจราคา/ปริมาณซื้อในหมวดนี้.$largestMessage',
+        english:
+            'Net cash flow is positive at ฿${netCashFlow.toStringAsFixed(2)}. ${AppText.categoryLabel(context, topCategory.key)} is ${share.toStringAsFixed(1)}% of expenses; review supplier prices and order quantities.$largestMessage',
+      );
     }
-    return 'ยังไม่มีรายจ่ายในช่วงนี้ รักษาการบันทึกรายการให้ครบเพื่อเห็นต้นทุนจริง';
+    return AppText.tr(
+      context,
+      'ยังไม่มีรายจ่ายในช่วงนี้ รักษาการบันทึกรายการให้ครบเพื่อเห็นต้นทุนจริง',
+      english: 'No expenses in this period. Keep records complete to understand actual costs.',
+    );
   }
 }
 
@@ -442,7 +448,9 @@ class _CashFlowChart extends StatelessWidget {
     );
 
     if (maximum <= 0) {
-      return const Center(child: Text('ยังไม่มีข้อมูลในช่วงเวลานี้'));
+      return Center(
+        child: Text(AppText.tr(context, 'ยังไม่มีข้อมูลในช่วงเวลานี้')),
+      );
     }
 
     return Row(

@@ -11,12 +11,20 @@ import '../model/shared_bill.dart';
 import '../model/transaction.dart';
 
 class AccountController extends ChangeNotifier {
+  static const List<String> defaultCategoryTags = [
+    'วัตถุดิบ',
+    'ค่าแรง',
+    'ลูกค้า',
+    'ทั่วไป',
+  ];
+
   final String userId;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   List<TransactionModel> _allTransactions = [];
   List<BookletModel> booklets = [];
   List<SharedBillModel> _allSharedBills = [];
+  List<String> _categoryTags = List.of(defaultCategoryTags);
   String selectedBookletId = 'business';
   bool isLoading = true;
   bool _creatingDefaultBooklet = false;
@@ -29,11 +37,13 @@ class AccountController extends ChangeNotifier {
   List<SharedBillModel> get sharedBills => _allSharedBills
       .where((bill) => bill.bookletId == selectedBookletId)
       .toList();
+  List<String> get categoryTags => List.unmodifiable(_categoryTags);
 
   AccountController({required this.userId}) {
     _listenToTransactions();
     _listenToBooklets();
     _listenToSharedBills();
+    _listenToCategoryTags();
     _loadSelectedBooklet();
   }
 
@@ -102,6 +112,47 @@ class AccountController extends ChangeNotifier {
             notifyListeners();
           }),
     );
+  }
+
+  void _listenToCategoryTags() {
+    _subscriptions.add(
+      _db
+          .collection('users')
+          .doc(userId)
+          .collection('settings')
+          .doc('categoryTags')
+          .snapshots()
+          .listen((snapshot) {
+            final savedTags = snapshot.data()?['categories'];
+            _categoryTags = savedTags is List
+                ? savedTags.whereType<String>().toList()
+                : List.of(defaultCategoryTags);
+            if (_categoryTags.isEmpty) {
+              _categoryTags = List.of(defaultCategoryTags);
+            }
+            notifyListeners();
+          }),
+    );
+  }
+
+  Future<void> saveCategoryTags(List<String> categories) async {
+    final cleaned = categories
+        .map((category) => category.trim())
+        .where((category) => category.isNotEmpty)
+        .toSet()
+        .toList();
+    if (cleaned.isEmpty) {
+      throw ArgumentError('ต้องมีหมวดหมู่อย่างน้อย 1 รายการ');
+    }
+    await _db
+        .collection('users')
+        .doc(userId)
+        .collection('settings')
+        .doc('categoryTags')
+        .set({
+          'categories': cleaned,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
   }
 
   Future<void> _loadSelectedBooklet() async {
@@ -203,12 +254,20 @@ class AccountController extends ChangeNotifier {
 
   int get actionCount => pendingCount + unpaidShareCount;
 
-  String generateAIAdvice() {
-    if (transactions.isEmpty) return 'ยังไม่มีข้อมูลเพียงพอสำหรับการวิเคราะห์';
+  String generateAIAdvice({bool english = false}) {
+    if (transactions.isEmpty) {
+      return english
+          ? 'There is not enough data to analyze yet.'
+          : 'ยังไม่มีข้อมูลเพียงพอสำหรับการวิเคราะห์';
+    }
     if (netProfit < 0) {
-      return 'คำเตือน: เดือนนี้มีสภาวะขาดทุนสุทธิ แนะนำคุมงบหมวด "วัตถุดิบ" และ "ค่าแรง"';
+      return english
+          ? 'Warning: this period has a net loss. Review spending on supplies and labor.'
+          : 'คำเตือน: เดือนนี้มีสภาวะขาดทุนสุทธิ แนะนำคุมงบหมวด "วัตถุดิบ" และ "ค่าแรง"';
     } else {
-      return 'ผลประกอบการดี: กำไรสุทธิอยู่ในเกณฑ์ปกติ มีกระแสเงินสดหมุนเวียนเพียงพอ';
+      return english
+          ? 'Results look positive: net profit is above zero. Keep recording transactions to monitor cash flow.'
+          : 'ผลประกอบการดี: กำไรสุทธิอยู่ในเกณฑ์ปกติ มีกระแสเงินสดหมุนเวียนเพียงพอ';
     }
   }
 

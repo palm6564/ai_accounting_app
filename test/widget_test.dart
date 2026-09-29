@@ -8,26 +8,33 @@
 // gestures. You can also use WidgetTester to find child widgets in the widget
 // tree, read text, and verify that the values of widget properties are correct.
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:ai_accounting_app/main.dart';
+import 'package:ai_accounting_app/service/auth_service.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  group('AuthService.isAtLeast18', () {
+    final today = DateTime(2026, 9, 29);
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    test('accepts the exact 18th birthday', () {
+      expect(
+        AuthService.isAtLeast18(DateTime(2008, 9, 29), now: today),
+        isTrue,
+      );
+    });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    test('rejects a date one day short of 18', () {
+      expect(
+        AuthService.isAtLeast18(DateTime(2008, 9, 30), now: today),
+        isFalse,
+      );
+    });
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    test('rejects a future date of birth', () {
+      expect(
+        AuthService.isAtLeast18(DateTime(2027, 1, 1), now: today),
+        isFalse,
+      );
+    });
   });
 }

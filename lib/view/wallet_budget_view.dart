@@ -6,8 +6,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../control/account_controller.dart';
+import '../l10n/app_text.dart';
 import '../model/transaction.dart';
-import '../service/export_service.dart';
 
 class WalletItem {
   final String id;
@@ -162,7 +162,11 @@ class _WalletBudgetViewState extends State<WalletBudgetView> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('บันทึกข้อมูลกระเป๋าไม่สำเร็จ: $error')),
+        SnackBar(
+          content: Text(
+            '${AppText.tr(context, 'บันทึกข้อมูลกระเป๋าไม่สำเร็จ')}: $error',
+          ),
+        ),
       );
     }
   }
@@ -180,46 +184,229 @@ class _WalletBudgetViewState extends State<WalletBudgetView> {
         .fold(0.0, (total, transaction) => total + transaction.amount);
   }
 
+  double _getCurrentMonthIncome() {
+    final now = DateTime.now();
+    return widget.controller.transactions
+        .where(
+          (transaction) =>
+              transaction.type == 'income' &&
+              transaction.status == 'verified' &&
+              transaction.date.year == now.year &&
+              transaction.date.month == now.month,
+        )
+        .fold(0.0, (total, transaction) => total + transaction.amount);
+  }
+
+  double _getAverageMonthlyExpense() {
+    final now = DateTime.now();
+    final end = DateTime(now.year, now.month);
+    final start = DateTime(now.year, now.month - 3);
+    final total = widget.controller.transactions
+        .where(
+          (transaction) =>
+              transaction.type == 'expense' &&
+              transaction.status == 'verified' &&
+              !transaction.date.isBefore(start) &&
+              transaction.date.isBefore(end),
+        )
+        .fold(0.0, (sum, transaction) => sum + transaction.amount);
+    return total / 3;
+  }
+
+  Widget _buildPersonalOverview({
+    required double cashBalance,
+    required double monthlyIncome,
+    required double monthlyExpense,
+    required double averageMonthlyExpense,
+  }) {
+    final monthlyNet = monthlyIncome - monthlyExpense;
+    final monthlyMaximum = monthlyIncome > monthlyExpense
+        ? monthlyIncome
+        : monthlyExpense;
+    final runwayDays = averageMonthlyExpense > 0
+        ? cashBalance / averageMonthlyExpense * 30
+        : null;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              AppText.tr(context, 'ภาพรวมเงินส่วนตัว'),
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              AppText.tr(context, 'ยอดกระเป๋าที่บันทึกไว้'),
+              style: TextStyle(color: Colors.grey.shade700),
+            ),
+            Text(
+              '฿${cashBalance.toStringAsFixed(2)}',
+              style: const TextStyle(fontSize: 25, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              AppText.tr(
+                context,
+                'ยอดจากบัญชีที่กรอกเอง ไม่ใช่ยอดธนาคารแบบเรียลไทม์',
+              ),
+              style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
+            ),
+            const Divider(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: _personalMetric(
+                    AppText.tr(context, 'รับเดือนนี้'),
+                    monthlyIncome,
+                    Colors.green.shade700,
+                  ),
+                ),
+                Expanded(
+                  child: _personalMetric(
+                    AppText.tr(context, 'จ่ายเดือนนี้'),
+                    monthlyExpense,
+                    Colors.deepOrange,
+                  ),
+                ),
+                Expanded(
+                  child: _personalMetric(
+                    AppText.tr(context, 'คงเหลือ'),
+                    monthlyNet,
+                    monthlyNet >= 0 ? Colors.teal.shade700 : Colors.red,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              AppText.tr(context, 'กระแสเงินสดเดือนนี้'),
+              style: TextStyle(color: Colors.grey.shade700),
+            ),
+            const SizedBox(height: 6),
+            _cashFlowBar(
+              label: AppText.tr(context, 'รับ'),
+              value: monthlyIncome,
+              maximum: monthlyMaximum,
+              color: Colors.green,
+            ),
+            const SizedBox(height: 6),
+            _cashFlowBar(
+              label: AppText.tr(context, 'จ่าย'),
+              value: monthlyExpense,
+              maximum: monthlyMaximum,
+              color: Colors.deepOrange,
+            ),
+            if (runwayDays != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                AppText.tr(
+                  context,
+                  'เงินที่บันทึกไว้อาจรองรับรายจ่ายได้ประมาณ ${runwayDays.toStringAsFixed(0)} วัน (ประเมินจากรายจ่ายเฉลี่ย 3 เดือนล่าสุด)',
+                  english:
+                      'Recorded funds may cover expenses for about ${runwayDays.toStringAsFixed(0)} days, based on the last three months.',
+                ),
+              ),
+            ] else ...[
+              const SizedBox(height: 12),
+              Text(
+                AppText.tr(
+                  context,
+                  'บันทึกรายจ่ายให้ครบ 3 เดือนเพื่อประเมินเงินสำรอง',
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _personalMetric(String label, double value, Color color) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(label, style: TextStyle(color: Colors.grey.shade700, fontSize: 12)),
+      const SizedBox(height: 4),
+      Text(
+        '฿${value.toStringAsFixed(0)}',
+        style: TextStyle(color: color, fontWeight: FontWeight.bold),
+        overflow: TextOverflow.ellipsis,
+      ),
+    ],
+  );
+
+  Widget _cashFlowBar({
+    required String label,
+    required double value,
+    required double maximum,
+    required Color color,
+  }) => Row(
+    children: [
+      SizedBox(width: 36, child: Text(label)),
+      Expanded(
+        child: LinearProgressIndicator(
+          value: maximum > 0 ? value / maximum : 0,
+          color: color,
+          backgroundColor: Colors.grey.shade200,
+          minHeight: 8,
+        ),
+      ),
+      const SizedBox(width: 8),
+      SizedBox(
+        width: 84,
+        child: Text(
+          '฿${value.toStringAsFixed(0)}',
+          textAlign: TextAlign.end,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    ],
+  );
+
   @override
   Widget build(BuildContext context) {
     final currentMonthExpense = _getCurrentMonthExpense();
+    final currentMonthIncome = _getCurrentMonthIncome();
+    final cashBalance = _wallets.fold(
+      0.0,
+      (sum, wallet) => sum + wallet.balance,
+    );
+    final averageMonthlyExpense = _getAverageMonthlyExpense();
     final budgetProgress = _monthlyBudget > 0
         ? currentMonthExpense / _monthlyBudget
         : 0.0;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('กระเป๋าเงิน & งบประมาณ'),
+        title: Text(AppText.tr(context, 'กระเป๋าเงิน & งบประมาณ')),
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.file_download),
-            tooltip: 'ส่งออก CSV',
-            onPressed: () {
-              ExportService.exportTransactionsToCSV(
-                widget.controller.transactions,
-              );
-            },
-          ),
-        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            _buildPersonalOverview(
+              cashBalance: cashBalance,
+              monthlyIncome: currentMonthIncome,
+              monthlyExpense: currentMonthExpense,
+              averageMonthlyExpense: averageMonthlyExpense,
+            ),
+            const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  '💳 บัญชี & กระเป๋าเงิน',
+                Text(
+                  AppText.tr(context, 'บัญชี & กระเป๋าเงิน'),
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 TextButton.icon(
                   onPressed: () => _showAddWalletDialog(context),
                   icon: const Icon(Icons.add_card),
-                  label: const Text('เพิ่มกระเป๋า'),
+                  label: Text(AppText.tr(context, 'เพิ่มกระเป๋า')),
                 ),
               ],
             ),
@@ -227,9 +414,12 @@ class _WalletBudgetViewState extends State<WalletBudgetView> {
             SizedBox(
               height: 100,
               child: _wallets.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Text(
-                        'ยังไม่มีกระเป๋าเงิน เพิ่มบัญชีเพื่อเริ่มบันทึกยอด',
+                        AppText.tr(
+                          context,
+                          'ยังไม่มีกระเป๋าเงิน เพิ่มบัญชีเพื่อเริ่มบันทึกยอด',
+                        ),
                       ),
                     )
                   : ListView.builder(
@@ -252,8 +442,8 @@ class _WalletBudgetViewState extends State<WalletBudgetView> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          '🎯 ควบคุมงบประมาณเดือนนี้',
+                        Text(
+                          AppText.tr(context, 'ควบคุมงบประมาณเดือนนี้'),
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -270,10 +460,20 @@ class _WalletBudgetViewState extends State<WalletBudgetView> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'ใช้จ่ายจริงเดือนนี้: ฿${currentMonthExpense.toStringAsFixed(2)}',
+                          AppText.tr(
+                            context,
+                            'ใช้จ่ายจริงเดือนนี้: ฿${currentMonthExpense.toStringAsFixed(2)}',
+                            english:
+                                'Spent this month: ฿${currentMonthExpense.toStringAsFixed(2)}',
+                          ),
                         ),
                         Text(
-                          'งบตั้งไว้: ฿${_monthlyBudget.toStringAsFixed(2)}',
+                          AppText.tr(
+                            context,
+                            'งบตั้งไว้: ฿${_monthlyBudget.toStringAsFixed(2)}',
+                            english:
+                                'Budget: ฿${_monthlyBudget.toStringAsFixed(2)}',
+                          ),
                         ),
                       ],
                     ),
@@ -290,8 +490,11 @@ class _WalletBudgetViewState extends State<WalletBudgetView> {
                     ),
                     const SizedBox(height: 8),
                     if (budgetProgress >= 1.0)
-                      const Text(
-                        '🚨 เตือน: ค่าใช้จ่ายเดือนนี้เกินงบประมาณที่ตั้งไว้แล้ว!',
+                      Text(
+                        AppText.tr(
+                          context,
+                          'เตือน: ค่าใช้จ่ายเดือนนี้เกินงบประมาณที่ตั้งไว้แล้ว!',
+                        ),
                         style: TextStyle(
                           color: Colors.red,
                           fontWeight: FontWeight.bold,
@@ -299,8 +502,11 @@ class _WalletBudgetViewState extends State<WalletBudgetView> {
                         ),
                       )
                     else if (budgetProgress >= 0.8)
-                      const Text(
-                        '⚠️ เตือน: ค่าใช้จ่ายใกล้เต็มงบประมาณแล้ว',
+                      Text(
+                        AppText.tr(
+                          context,
+                          'เตือน: ค่าใช้จ่ายใกล้เต็มงบประมาณแล้ว',
+                        ),
                         style: TextStyle(
                           color: Colors.orange,
                           fontWeight: FontWeight.bold,
@@ -315,23 +521,25 @@ class _WalletBudgetViewState extends State<WalletBudgetView> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  '🔄 รายการจ่ายประจำ',
+                Text(
+                  AppText.tr(context, 'รายการจ่ายประจำ'),
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 TextButton.icon(
                   onPressed: () => _showAddRecurringDialog(context),
                   icon: const Icon(Icons.add),
-                  label: const Text('เพิ่ม'),
+                  label: Text(AppText.tr(context, 'เพิ่ม')),
                 ),
               ],
             ),
             const SizedBox(height: 8),
             if (_recurringItems.isEmpty)
-              const Card(
+              Card(
                 child: Padding(
                   padding: EdgeInsets.all(16),
-                  child: Center(child: Text('ไม่มีรายการจ่ายประจำ')),
+                  child: Center(
+                    child: Text(AppText.tr(context, 'ไม่มีรายการจ่ายประจำ')),
+                  ),
                 ),
               )
             else
@@ -352,7 +560,7 @@ class _WalletBudgetViewState extends State<WalletBudgetView> {
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                       subtitle: Text(
-                        'หมวด: ${item.category} | กำหนด: ${item.dueDate}',
+                        '${AppText.tr(context, 'หมวด')}: ${AppText.categoryLabel(context, item.category)} | ${AppText.tr(context, 'กำหนด')}: ${item.dueDate}',
                       ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -373,14 +581,16 @@ class _WalletBudgetViewState extends State<WalletBudgetView> {
                                 unawaited(_persistSettings());
                               }
                             },
-                            itemBuilder: (context) => const [
+                            itemBuilder: (context) => [
                               PopupMenuItem(
                                 value: 'pay',
-                                child: Text('ลงบันทึกจ่ายแล้ว'),
+                                child: Text(
+                                  AppText.tr(context, 'ลงบันทึกจ่ายแล้ว'),
+                                ),
                               ),
                               PopupMenuItem(
                                 value: 'delete',
-                                child: Text('ลบรายการ'),
+                                child: Text(AppText.tr(context, 'ลบรายการ')),
                               ),
                             ],
                           ),
@@ -423,7 +633,7 @@ class _WalletBudgetViewState extends State<WalletBudgetView> {
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
                 icon: const Icon(Icons.close, color: Colors.white70, size: 18),
-                tooltip: 'ลบกระเป๋า',
+                tooltip: AppText.tr(context, 'ลบกระเป๋า'),
                 onPressed: () => setState(() {
                   _wallets.removeWhere((item) => item.id == wallet.id);
                   unawaited(_persistSettings());
@@ -464,15 +674,25 @@ class _WalletBudgetViewState extends State<WalletBudgetView> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('บันทึกรายจ่าย "${item.title}" เรียบร้อยแล้ว'),
+          content: Text(
+            AppText.tr(
+              context,
+              'บันทึกรายจ่าย "${item.title}" เรียบร้อยแล้ว',
+              english: 'Expense "${item.title}" recorded.',
+            ),
+          ),
           backgroundColor: Colors.green,
         ),
       );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('บันทึกรายจ่ายไม่สำเร็จ: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${AppText.tr(context, 'บันทึกรายจ่ายไม่สำเร็จ')}: $error',
+          ),
+        ),
+      );
     }
   }
 
@@ -482,21 +702,23 @@ class _WalletBudgetViewState extends State<WalletBudgetView> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('เพิ่มกระเป๋าเงิน / บัญชี'),
+        title: Text(AppText.tr(context, 'เพิ่มกระเป๋าเงิน / บัญชี')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: nameController,
-              decoration: const InputDecoration(labelText: 'ชื่อบัญชี/กระเป๋า'),
+              decoration: InputDecoration(
+                labelText: AppText.tr(context, 'ชื่อบัญชี/กระเป๋า'),
+              ),
             ),
             TextField(
               controller: balanceController,
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
-              decoration: const InputDecoration(
-                labelText: 'ยอดเงินเริ่มต้น (บาท)',
+              decoration: InputDecoration(
+                labelText: AppText.tr(context, 'ยอดเงินเริ่มต้น (บาท)'),
               ),
             ),
           ],
@@ -504,7 +726,7 @@ class _WalletBudgetViewState extends State<WalletBudgetView> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('ยกเลิก'),
+            child: Text(AppText.tr(context, 'ยกเลิก')),
           ),
           ElevatedButton(
             onPressed: () {
@@ -524,7 +746,7 @@ class _WalletBudgetViewState extends State<WalletBudgetView> {
               unawaited(_persistSettings());
               Navigator.pop(context);
             },
-            child: const Text('บันทึก'),
+            child: Text(AppText.tr(context, 'บันทึก')),
           ),
         ],
       ),
@@ -536,16 +758,18 @@ class _WalletBudgetViewState extends State<WalletBudgetView> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('ตั้งงบประมาณรายเดือน'),
+        title: Text(AppText.tr(context, 'ตั้งงบประมาณรายเดือน')),
         content: TextField(
           controller: controller,
           keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: 'จำนวนเงิน (บาท)'),
+          decoration: InputDecoration(
+            labelText: AppText.tr(context, 'จำนวนเงิน (บาท)'),
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('ยกเลิก'),
+            child: Text(AppText.tr(context, 'ยกเลิก')),
           ),
           ElevatedButton(
             onPressed: () {
@@ -556,7 +780,7 @@ class _WalletBudgetViewState extends State<WalletBudgetView> {
               unawaited(_persistSettings());
               Navigator.pop(ctx);
             },
-            child: const Text('บันทึก'),
+            child: Text(AppText.tr(context, 'บันทึก')),
           ),
         ],
       ),
@@ -572,29 +796,35 @@ class _WalletBudgetViewState extends State<WalletBudgetView> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('เพิ่มรายการจ่ายประจำ'),
+        title: Text(AppText.tr(context, 'เพิ่มรายการจ่ายประจำ')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: titleController,
-              decoration: const InputDecoration(labelText: 'ชื่อรายการ'),
+              decoration: InputDecoration(
+                labelText: AppText.tr(context, 'ชื่อรายการ'),
+              ),
             ),
             TextField(
               controller: amountController,
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
-              decoration: const InputDecoration(labelText: 'จำนวนเงิน'),
+              decoration: InputDecoration(
+                labelText: AppText.tr(context, 'จำนวนเงิน'),
+              ),
             ),
             TextField(
               controller: categoryController,
-              decoration: const InputDecoration(labelText: 'หมวดหมู่'),
+              decoration: InputDecoration(
+                labelText: AppText.tr(context, 'หมวดหมู่'),
+              ),
             ),
             TextField(
               controller: dueController,
-              decoration: const InputDecoration(
-                labelText: 'รอบการจ่าย (เช่น ทุกวันที่ 5)',
+              decoration: InputDecoration(
+                labelText: AppText.tr(context, 'รอบการจ่าย (เช่น ทุกวันที่ 5)'),
               ),
             ),
           ],
@@ -602,7 +832,7 @@ class _WalletBudgetViewState extends State<WalletBudgetView> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('ยกเลิก'),
+            child: Text(AppText.tr(context, 'ยกเลิก')),
           ),
           ElevatedButton(
             onPressed: () {
@@ -616,10 +846,10 @@ class _WalletBudgetViewState extends State<WalletBudgetView> {
                       title: title,
                       amount: amount,
                       category: categoryController.text.trim().isEmpty
-                          ? 'ทั่วไป'
+                          ? AppText.tr(context, 'ทั่วไป')
                           : categoryController.text.trim(),
                       dueDate: dueController.text.trim().isEmpty
-                          ? 'ทุกสิ้นเดือน'
+                          ? AppText.tr(context, 'ทุกสิ้นเดือน')
                           : dueController.text.trim(),
                     ),
                   );
@@ -628,7 +858,7 @@ class _WalletBudgetViewState extends State<WalletBudgetView> {
               }
               Navigator.pop(ctx);
             },
-            child: const Text('บันทึก'),
+            child: Text(AppText.tr(context, 'บันทึก')),
           ),
         ],
       ),

@@ -3,6 +3,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../l10n/app_text.dart';
 import '../service/auth_service.dart';
 
 class LoginView extends StatefulWidget {
@@ -21,8 +22,42 @@ class _LoginViewState extends State<LoginView> {
   bool isSignUp = false;
   bool isLoading = false;
   bool _obscurePassword = true;
+  DateTime? _dateOfBirth;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _selectDateOfBirth() async {
+    final now = DateTime.now();
+    final latestAdultBirthDate = DateTime(now.year - 18, now.month, now.day);
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _dateOfBirth ?? latestAdultBirthDate,
+      firstDate: DateTime(1900),
+      lastDate: latestAdultBirthDate,
+      helpText: AppText.tr(context, 'เลือกวันเกิด'),
+    );
+    if (date != null && mounted) setState(() => _dateOfBirth = date);
+  }
 
   void _submit() async {
+    if (isSignUp &&
+        (_dateOfBirth == null || !AuthService.isAtLeast18(_dateOfBirth!))) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            AppText.tr(context, 'สมัครสมาชิกได้เมื่ออายุครบ 18 ปีบริบูรณ์'),
+          ),
+        ),
+      );
+      return;
+    }
+
     setState(() => isLoading = true);
     try {
       if (isSignUp) {
@@ -30,6 +65,7 @@ class _LoginViewState extends State<LoginView> {
           email: _emailController.text.trim(),
           password: _passwordController.text.trim(),
           name: _nameController.text.trim(),
+          dateOfBirth: _dateOfBirth!,
         );
       } else {
         await _authService.signInWithEmail(
@@ -37,10 +73,12 @@ class _LoginViewState extends State<LoginView> {
           password: _passwordController.text.trim(),
         );
       }
-    } catch (e) {
+    } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('เกิดข้อผิดพลาด: ${e.toString()}')),
+          SnackBar(
+            content: Text('${AppText.tr(context, 'เกิดข้อผิดพลาด')}: $error'),
+          ),
         );
       }
     } finally {
@@ -63,8 +101,8 @@ class _LoginViewState extends State<LoginView> {
                   const SizedBox(height: 16),
                   Text(
                     isSignUp
-                        ? 'สมัครสมาชิก AI Accounting'
-                        : 'เข้าสู่ระบบ AI Accounting',
+                        ? AppText.tr(context, 'สมัครสมาชิก AI Accounting')
+                        : AppText.tr(context, 'เข้าสู่ระบบ AI Accounting'),
                     style: const TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
@@ -74,17 +112,36 @@ class _LoginViewState extends State<LoginView> {
                   if (isSignUp) ...[
                     TextField(
                       controller: _nameController,
-                      decoration: const InputDecoration(
-                        labelText: 'ชื่อร้านค้า / ผู้ใช้งาน',
+                      decoration: InputDecoration(
+                        labelText: AppText.tr(
+                          context,
+                          'ชื่อร้านค้า / ผู้ใช้งาน',
+                        ),
                         border: OutlineInputBorder(),
                       ),
                     ),
                     const SizedBox(height: 12),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.cake_outlined),
+                      title: Text(AppText.tr(context, 'วันเดือนปีเกิด')),
+                      subtitle: Text(
+                        _dateOfBirth == null
+                            ? AppText.tr(
+                                context,
+                                'เลือกวันเกิด (ต้องมีอายุ 18 ปีขึ้นไป)',
+                              )
+                            : AppText.formatDate(context, _dateOfBirth!),
+                      ),
+                      trailing: const Icon(Icons.calendar_month_outlined),
+                      onTap: _selectDateOfBirth,
+                    ),
+                    const SizedBox(height: 8),
                   ],
                   TextField(
                     controller: _emailController,
-                    decoration: const InputDecoration(
-                      labelText: 'อีเมล',
+                    decoration: InputDecoration(
+                      labelText: AppText.tr(context, 'อีเมล'),
                       border: OutlineInputBorder(),
                     ),
                     keyboardType: TextInputType.emailAddress,
@@ -94,7 +151,7 @@ class _LoginViewState extends State<LoginView> {
                     controller: _passwordController,
                     obscureText: _obscurePassword,
                     decoration: InputDecoration(
-                      labelText: 'รหัสผ่าน',
+                      labelText: AppText.tr(context, 'รหัสผ่าน'),
                       border: const OutlineInputBorder(),
                       suffixIcon: IconButton(
                         icon: Icon(
@@ -123,7 +180,10 @@ class _LoginViewState extends State<LoginView> {
                               backgroundColor: Colors.indigo,
                             ),
                             child: Text(
-                              isSignUp ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ',
+                              AppText.tr(
+                                context,
+                                isSignUp ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ',
+                              ),
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 16,
@@ -135,8 +195,8 @@ class _LoginViewState extends State<LoginView> {
                     onPressed: () => setState(() => isSignUp = !isSignUp),
                     child: Text(
                       isSignUp
-                          ? 'มีบัญชีแล้ว? เข้าสู่ระบบ'
-                          : 'ยังไม่มีบัญชี? สมัครสมาชิก',
+                          ? AppText.tr(context, 'มีบัญชีแล้ว? เข้าสู่ระบบ')
+                          : AppText.tr(context, 'ยังไม่มีบัญชี? สมัครสมาชิก'),
                     ),
                   ),
                 ],
