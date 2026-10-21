@@ -9,15 +9,16 @@ import 'package:flutter/foundation.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:image_picker/image_picker.dart';
 
-import 'slip/compatible_client.dart';
 import 'slip/direction_matcher.dart';
-import 'slip/gemini_client.dart';
-import 'slip/ai_types.dart';
+import 'slip/roboflow_detector.dart';
+import 'slip/roboflow_slip_reader.dart';
 import 'slip/offline_slip_parser.dart';
 import 'slip/slip_categorizer.dart';
 import 'slip/slip_config.dart';
+import 'slip/slip_field_reader.dart';
 import 'slip/slip_models.dart';
 import 'slip/slip_reader.dart';
+import 'slip/slip_server_reader.dart';
 import 'slip/slip_text.dart';
 
 class SlipImportSummary {
@@ -45,7 +46,7 @@ class _Owner {
 
 /// จุดเข้าใช้งานส่วนอ่านสลิปด้วย AI (หน้าตาภายนอกเหมือนเดิมทุกอย่าง)
 ///
-/// ตรรกะจริงอยู่ใน lib/service/slip/ : อ่านภาพด้วย Gemini 2 รุ่นเทียบกัน → ตรวจ/ให้คะแนนด้วยโค้ด →
+/// ตรรกะจริงอยู่ใน lib/service/slip/ : หาช่องด้วยโมเดล Roboflow ที่เทรนเอง + OCR ในเครื่อง → ตรวจ/ให้คะแนนด้วยโค้ด →
 /// ตัดสินเข้า/ออก/โอนภายในด้วยชื่อและเลขบัญชี → จัดหมวดตามชุดหมวดของสมุดบัญชี
 class ApiService {
   static final ImagePicker _picker = ImagePicker();
@@ -69,27 +70,21 @@ class ApiService {
     final owner = await _loadOwner(userRef);
     final profile = await _loadProfile(userRef, bookletId);
 
-    final gemini = GeminiClient(apiKey: SlipConfig.geminiApiKey);
-    if (!gemini.isConfigured &&
-        SlipConfig.openAiApiKey.isEmpty &&
-        SlipConfig.groqApiKey.isEmpty) {
+    // ตั้ง SLIP_API_URL = ใช้เซิร์ฟเวอร์อ่านสลิปของเราเอง ไม่ตั้ง = Roboflow + OCR ในเครื่อง (ตัวเดิม)
+    final scorer = SlipReader(onLog: debugPrint);
+    final SlipFieldReader reader = SlipConfig.slipApiUrl.isNotEmpty
+        ? SlipServerReader(scorer: scorer, onLog: debugPrint)
+        : RoboflowSlipReader(
+            detector: RoboflowDetector(),
+            scorer: scorer,
+            onLog: debugPrint,
+          );
+    if (!reader.isConfigured) {
       debugPrint(
-        '⚠ ยังไม่ได้ตั้ง GEMINI_API_KEY / OPENAI_API_KEY / GROQ_API_KEY '
-        '(--dart-define) ทุกสลิปจะใช้ regex ออฟไลน์ ซึ่งอ่านภาษาไทยไม่ได้',
+        '⚠ ${reader.setupHint} ทุกสลิปจะใช้ regex ออฟไลน์ ซึ่งอ่านภาษาไทยไม่ได้',
       );
     }
-    final GeminiCall geminiCall = gemini.isConfigured
-        ? gemini.call
-        : (GeminiRequest request) async => null;
-    final reader = SlipReader(call: geminiCall, onLog: debugPrint);
-    final categorizer = SlipCategorizer(
-      profile: profile,
-      ask: gemini.isConfigured
-          ? (String prompt) => geminiCall(
-              GeminiRequest(model: SlipConfig.primaryModel, prompt: prompt),
-            )
-          : null,
-    );
+    final categorizer = SlipCategorizer(profile: profile);
 
     var savedCount = 0;
     var duplicateCount = 0;
@@ -146,39 +141,26 @@ class ApiService {
 
   // ------------------------------------------------------------ อ่านสลิป 1 ใบ
 
-  /// ลำดับ: Gemini 2 รุ่น → OpenAI/Groq (ถ้าตั้ง key) → regex ออฟไลน์ → รายการเปล่าให้กรอกเอง (ไม่ทิ้งสลิป)
+  /// ลำดับ: เซิร์ฟเวอร์อ่านสลิป (หรือ Roboflow + OCR ในเครื่อง) → regex ออฟไลน์ → รายการเปล่าให้กรอกเอง (ไม่ทิ้งสลิป)
   static Future<SlipOutcome> _readOne(
     XFile image,
     _Owner owner,
-    SlipReader reader,
+    SlipFieldReader reader,
     SlipCategorizer categorizer,
     String? hint,
   ) async {
     final ocrText = await _recognizeSlipText(image);
     final bytes = await image.readAsBytes();
-    final mime = _mimeType(image);
 
-    var scored = await reader.read(
-      image: bytes,
-      mimeType: mime,
-      ownerName: owner.name,
-      ocrHint: ocrText,
-    );
-    scored ??= await _readWithOtherProviders(
-      reader,
-      bytes,
-      mime,
-      owner.name,
-      ocrText,
-    );
+    final scored = reader.isConfigured ? await reader.read(bytes) : null;
     if (scored == null) {
       // บอกสาเหตุในหมายเหตุของรายการ ผู้ใช้จะได้เห็นโดยไม่ต้องเปิด log
-      final reason = SlipConfig.geminiApiKey.isEmpty
-          ? 'ไม่ได้ตั้ง GEMINI_API_KEY (ต้องรันด้วย --dart-define-from-file=env.json แล้วหยุดและรันใหม่ทั้งหมด)'
+      final reason = !reader.isConfigured
+          ? reader.setupHint
           : reader.errors.isEmpty
-          ? 'ไม่มีรุ่นไหนตอบกลับ'
+          ? 'ตรวจจับช่องบนสลิปไม่ได้'
           : reader.errors.join(' | ');
-      debugPrint('AI ทุกตัวใช้ไม่ได้: $reason');
+      debugPrint('อ่านสลิปไม่ได้: $reason');
       return ocrText != null
           ? OfflineSlipParser.parse(ocrText, reason: reason)
           : OfflineSlipParser.emergency(reason: reason);
@@ -230,51 +212,6 @@ class ApiService {
       source: scored.source,
       issues: issues,
     );
-  }
-
-  /// ตัวสำรองเมื่อ Gemini ใช้ไม่ได้ทั้งสองรุ่น: ผู้ให้บริการที่ตั้ง key ไว้ (ผลมีรุ่นเดียว จึงถูกหักคะแนนไปรอตรวจ)
-  static Future<ScoredRead?> _readWithOtherProviders(
-    SlipReader reader,
-    Uint8List bytes,
-    String mime,
-    String ownerName,
-    String? ocrText,
-  ) async {
-    final prompt = SlipReader.buildPrompt(
-      ownerName: ownerName,
-      ocrHint: ocrText,
-    );
-    final providers = <List<String>>[
-      <String>[
-        'openai_${SlipConfig.openAiModel}',
-        SlipConfig.openAiApiKey,
-        SlipConfig.openAiEndpoint,
-        SlipConfig.openAiModel,
-      ],
-      <String>[
-        'groq_${SlipConfig.groqVisionModel}',
-        SlipConfig.groqApiKey,
-        SlipConfig.groqEndpoint,
-        SlipConfig.groqVisionModel,
-      ],
-    ];
-    for (final provider in providers) {
-      if (provider[1].isEmpty) continue;
-      final text = await callCompatibleModel(
-        apiKey: provider[1],
-        endpoint: provider[2],
-        model: provider[3],
-        prompt: prompt,
-        image: bytes,
-        mimeType: mime,
-      );
-      final read = text == null
-          ? null
-          : SlipRead.fromJson(parseJsonObject(text));
-      if (read != null)
-        return reader.evaluate(<SlipRead>[read], source: provider[0]);
-    }
-    return null;
   }
 
   /// OCR ในเครื่อง (ML Kit แบบ latin อ่านภาษาไทยไม่ได้ ใช้เป็นตัวช่วยอ้างอิงและตัวสำรองออฟไลน์เท่านั้น)
@@ -353,17 +290,5 @@ class ApiService {
         .limit(1)
         .get();
     return canonical.docs.isNotEmpty;
-  }
-
-  static String _mimeType(XFile image) {
-    final mimeType = image.mimeType;
-    if (mimeType != null) return mimeType;
-    final name = image.name.toLowerCase();
-    if (name.endsWith('.png')) return 'image/png';
-    if (name.endsWith('.webp')) return 'image/webp';
-    if (name.endsWith('.heic') || name.endsWith('.heif')) {
-      return 'image/heic';
-    }
-    return 'image/jpeg';
   }
 }

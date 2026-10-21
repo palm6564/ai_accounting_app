@@ -7,7 +7,30 @@
 class SlipConfig {
   const SlipConfig._();
 
-  // ---- key ----
+  // ---- เซิร์ฟเวอร์อ่านสลิปของเราเอง (Hugging Face Space) ตั้งค่าแล้วจะใช้แทน Roboflow ----
+  /// เช่น `https://<user>-<space>.hf.space` (ไม่ต้องมี /read-slip)
+  static const String slipApiUrl = String.fromEnvironment('SLIP_API_URL');
+
+  /// HF token (read) สำหรับ Space แบบ private ส่งเป็น Authorization: Bearer
+  static const String slipApiToken = String.fromEnvironment('SLIP_API_TOKEN');
+
+  /// เวลารอต่อครั้ง (อ่าน 1 ใบบน CPU ราว 5 วินาที แต่ครั้งแรกหลัง Space ตื่นอาจนานกว่า)
+  static const Duration slipApiTimeout = Duration(seconds: 90);
+
+  /// Space ที่หลับจะตอบ 503 ระหว่างตื่น/โหลดโมเดล: ลองใหม่ทุก 20 วินาที สูงสุด 10 ครั้ง (~3 นาที)
+  static const int slipApiWakeAttempts = 10;
+  static const Duration slipApiWakeDelay = Duration(seconds: 20);
+
+  // ---- โมเดลตรวจจับช่องบนสลิปที่เทรนเองบน Roboflow (ตัวสำรอง เมื่อไม่ได้ตั้ง SLIP_API_URL) ----
+  static const String roboflowApiKey = String.fromEnvironment(
+    'ROBOFLOW_API_KEY',
+  );
+
+  /// "ชื่อโปรเจกต์/เลขเวอร์ชัน" เช่น slip-fields/1
+  static const String roboflowModel = String.fromEnvironment('ROBOFLOW_MODEL');
+  static const double roboflowConfidence = 0.4;
+
+  // ---- key (ตัวเลือกสำรองเดิม ไม่ได้ใช้ในเส้นทางหลักแล้ว) ----
   static const String geminiApiKey = String.fromEnvironment('GEMINI_API_KEY');
   static const String openAiApiKey = String.fromEnvironment('OPENAI_API_KEY');
   static const String groqApiKey = String.fromEnvironment('GROQ_API_KEY');
@@ -51,6 +74,6 @@ class SlipConfig {
   /// เว้นระหว่างสลิป (อ่าน 2 รุ่นต่อใบ + จัดหมวด จึงต้องเว้นนานกว่าเดิมกันชนโควตา free tier)
   static const int delayBetweenSlipsMs = int.fromEnvironment(
     'SLIP_DELAY_MS',
-    defaultValue: 5000,
+    defaultValue: 200,
   );
 }
