@@ -22,7 +22,7 @@ class _Check {
 /// ไม่มีข้อความ OCR ไว้ตรวจยอด จึงใช้การอ่านซ้ำแทน: ยอด/วันที่/เลขอ้างอิงไม่ตรงกันหักหนัก, ชื่อไม่ตรงกันหักเบา
 class SlipReader {
   SlipReader({
-    required GeminiCall call,
+    GeminiCall? call,
     List<String>? models,
     DateTime Function()? now,
     void Function(String message)? onLog,
@@ -38,7 +38,7 @@ class SlipReader {
        _now = now ?? DateTime.now,
        _log = onLog;
 
-  final GeminiCall _call;
+  final GeminiCall? _call;
 
   /// สาเหตุที่แต่ละรุ่นอ่านไม่สำเร็จในการเรียก [read] ครั้งล่าสุด (ไว้แสดงให้ผู้ใช้เห็นเมื่ออ่านไม่ได้เลย)
   final List<String> errors = <String>[];
@@ -98,11 +98,13 @@ class SlipReader {
     String? ocrHint,
   }) async {
     errors.clear();
+    final call = _call;
+    if (call == null) return null;
     final prompt = buildPrompt(ownerName: ownerName, ocrHint: ocrHint);
     final reads = <SlipRead>[];
     for (final model in models) {
       try {
-        final text = await _call(
+        final text = await call(
           GeminiRequest(
             model: model,
             prompt: prompt,
@@ -134,7 +136,11 @@ class SlipReader {
   }
 
   /// ตรวจและให้คะแนน: [reads] มี 1 หรือ 2 ผล (จากคนละรุ่น/คนละผู้ให้บริการ)
-  ScoredRead evaluate(List<SlipRead> reads, {required String source}) {
+  ScoredRead evaluate(
+    List<SlipRead> reads, {
+    required String source,
+    double singleReadPenalty = 0.2,
+  }) {
     var chosen = reads.first;
     final notes = <String>[];
     var penalty = 0.0;
@@ -146,7 +152,7 @@ class SlipReader {
       }
     } else {
       notes.add('อ่านได้รุ่นเดียว ไม่มีการเทียบ');
-      penalty += 0.2;
+      penalty += singleReadPenalty;
     }
     if (_hasOddName(chosen)) {
       notes.add('ชื่อมีอักษรแปลกปลอม');

@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+python-multipart
+huggingface_hub
+rfdetr
+easyocr
+transformers
+opencv-python-headless
+numpy
+pillow

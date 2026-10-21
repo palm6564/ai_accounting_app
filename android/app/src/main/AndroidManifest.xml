@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- ส่งรูปสลิปไปเซิร์ฟเวอร์อ่านสลิป (APK แบบ release ไม่มีสิทธิ์นี้ให้อัตโนมัติเหมือนตอน debug) -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <application
         android:label="ai_accounting_app"
         android:name="${applicationName}"
